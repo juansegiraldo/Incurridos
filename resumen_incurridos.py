@@ -73,6 +73,15 @@ def resolver_columna(df, candidatos, label):
     st.stop()
 
 
+def resolver_columna_opcional(df, candidatos):
+    columnas = {clave_columna(col): col for col in df.columns}
+    for candidato in candidatos:
+        real = columnas.get(clave_columna(candidato))
+        if real is not None:
+            return real
+    return None
+
+
 def to_numeric_safe(serie):
     return pd.to_numeric(serie, errors="coerce").fillna(0.0)
 
@@ -201,6 +210,7 @@ col_project_name = resolver_columna(df_incurridos, ["PROJECT NAME", "Proyecto"],
 col_persona = resolver_columna(df_incurridos, ["Nombre Completo", "Empleado", "Persona"], "Persona")
 col_jornadas = resolver_columna(df_incurridos, ["Jornadas"], "Jornadas")
 col_coste = resolver_columna(df_incurridos, ["CosteEUR", "Coste EUR", "Coste"], "CosteEUR")
+col_fecha = resolver_columna_opcional(df_incurridos, ["FechaImputacion", "Fecha Imputacion", "Fecha", "Date"])
 
 df_work = df_incurridos.copy()
 df_work[col_project_name] = df_work[col_project_name].apply(normalizar_texto)
@@ -332,3 +342,50 @@ if archivo_controlling is not None:
             st.success("Todos los PROJECT NAME de la salida existen en controlling.")
     except Exception as exc:
         st.error(f"No pude validar el archivo de controlling: {exc}")
+
+st.subheader("Analisis adicional")
+tab_detalle, tab_hist = st.tabs(["Detalle por proyecto", "Histogramas de jornadas por dia"])
+
+with tab_detalle:
+    proyecto_detalle = st.selectbox(
+        "Proyecto para ver detalle",
+        options=proyectos_sel,
+        index=0,
+        key="detalle_proyecto",
+    )
+    df_detalle = df_ajustado[df_ajustado[col_project_name] == proyecto_detalle].copy()
+    cols_detalle = [col_project_name, col_persona]
+    if col_fecha is not None:
+        cols_detalle.append(col_fecha)
+    cols_detalle.extend([col_jornadas, "JornadasAdj", col_coste, "CosteAdj", "FactorPersona", "FxPersona"])
+    cols_detalle = [c for c in cols_detalle if c in df_detalle.columns]
+    st.dataframe(df_detalle[cols_detalle], use_container_width=True)
+
+with tab_hist:
+    if col_fecha is None:
+        st.info("No encontre columna de fecha en Incurridos para construir histogramas por dia.")
+    else:
+        proyectos_hist = st.multiselect(
+            "Proyectos para histograma diario",
+            options=proyectos_sel,
+            default=proyectos_sel[:3] if len(proyectos_sel) > 3 else proyectos_sel,
+            key="hist_proyectos",
+        )
+        if not proyectos_hist:
+            st.warning("Selecciona al menos un proyecto para ver histogramas.")
+        else:
+            for proyecto in proyectos_hist:
+                df_hist = df_ajustado[df_ajustado[col_project_name] == proyecto].copy()
+                df_hist["FechaDia"] = pd.to_datetime(df_hist[col_fecha], errors="coerce").dt.date
+                serie = (
+                    df_hist.dropna(subset=["FechaDia"])
+                    .groupby("FechaDia")["JornadasAdj"]
+                    .sum()
+                    .reset_index()
+                    .sort_values("FechaDia")
+                )
+                st.markdown(f"**{proyecto}**")
+                if serie.empty:
+                    st.caption("Sin fechas validas para este proyecto.")
+                else:
+                    st.bar_chart(serie.set_index("FechaDia")["JornadasAdj"])

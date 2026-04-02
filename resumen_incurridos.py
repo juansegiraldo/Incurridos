@@ -361,6 +361,22 @@ with tab_detalle:
     cols_detalle = [c for c in cols_detalle if c in df_detalle.columns]
     st.dataframe(df_detalle[cols_detalle], use_container_width=True)
 
+    st.markdown("**Resumen por persona (proyecto seleccionado)**")
+    resumen_persona = (
+        df_detalle.groupby(col_persona, dropna=False)
+        .agg(
+            JornadasBase=(col_jornadas, lambda s: to_numeric_safe(s).sum()),
+            JornadasAdj=("JornadasAdj", "sum"),
+            CosteBase=(col_coste, lambda s: to_numeric_safe(s).sum()),
+            CosteAdj=("CosteAdj", "sum"),
+        )
+        .reset_index()
+        .sort_values("CosteAdj", ascending=False)
+    )
+    for c in ["JornadasBase", "JornadasAdj", "CosteBase", "CosteAdj"]:
+        resumen_persona[c] = resumen_persona[c].round(2)
+    st.dataframe(resumen_persona, use_container_width=True)
+
 with tab_hist:
     if col_fecha is None:
         st.info("No encontre columna de fecha en Incurridos para construir histogramas por dia.")

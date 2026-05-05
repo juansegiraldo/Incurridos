@@ -275,6 +275,27 @@ if not proyectos_sel:
     st.stop()
 
 df_filtrado = df_jp[df_jp[col_project_name].isin(proyectos_sel)].copy()
+
+if col_fecha is not None:
+    df_filtrado["_fecha_dt"] = pd.to_datetime(df_filtrado[col_fecha], errors="coerce")
+    fechas_validas = df_filtrado["_fecha_dt"].dropna()
+    if not fechas_validas.empty:
+        fecha_min = fechas_validas.min().date()
+        fecha_max = fechas_validas.max().date()
+        import datetime
+        col_f1, col_f2 = st.columns(2)
+        with col_f1:
+            fecha_desde = st.date_input("Fecha desde", value=fecha_min, min_value=fecha_min, max_value=fecha_max, key="fecha_desde")
+        with col_f2:
+            fecha_hasta = st.date_input("Fecha hasta", value=fecha_max, min_value=fecha_min, max_value=fecha_max, key="fecha_hasta")
+        if fecha_desde > fecha_hasta:
+            st.error("La fecha desde no puede ser posterior a la fecha hasta.")
+            st.stop()
+        mask = df_filtrado["_fecha_dt"].dt.date.between(fecha_desde, fecha_hasta) | df_filtrado["_fecha_dt"].isna()
+        df_filtrado = df_filtrado[mask].copy()
+        st.caption(f"Rango de fechas: {fecha_desde} → {fecha_hasta}")
+    df_filtrado = df_filtrado.drop(columns=["_fecha_dt"])
+
 st.caption(f"Registros filtrados: {len(df_filtrado)}")
 
 st.subheader("Ajustes por persona")
